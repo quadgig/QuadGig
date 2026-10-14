@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import router as auth_router
+from app.config import settings
 from app.listings import router as listings_router
 from app.orders import router as orders_router
 from app.payments import router as payments_router
@@ -16,7 +17,7 @@ app.include_router(reviews_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://quad-gig.vercel.app"],
+    allow_origins=["http://localhost:3000", settings.frontend_url.rstrip("/")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

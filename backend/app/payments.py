@@ -17,9 +17,8 @@ def onboard_seller(user: dict = Depends(get_current_user)):
     expire quickly, so a new one is generated on every call rather
     than caching the URL.
 
-    NOTE: refresh_url/return_url below are placeholders. Once Adamu
-    has deep-linking set up in the Expo app, these should point at
-    real app URLs (e.g. quadgig://onboarding-complete) instead.
+    Stripe sends the seller back to the web app's /onboarding/complete
+    page when they finish, or /onboarding/refresh if the link expired.
     """
     supabase = get_supabase()
     stripe = get_stripe()
@@ -43,8 +42,8 @@ def onboard_seller(user: dict = Depends(get_current_user)):
     try:
         link = stripe.v1.account_links.create({
             "account": account_id,
-            "refresh_url": "https://example.com/onboarding-refresh",  # TODO: replace with real app URL
-            "return_url": "https://example.com/onboarding-complete",  # TODO: replace with real app URL
+            "refresh_url": f"{settings.frontend_url.rstrip('/')}/onboarding/refresh",
+            "return_url": f"{settings.frontend_url.rstrip('/')}/onboarding/complete",
             "type": "account_onboarding",
         })
     except Exception as e:
@@ -111,6 +110,17 @@ async def stripe_webhook(request: Request):
         try:
             supabase.table("orders").update({"payment_status": "refunded"}) \
                 .eq("stripe_payment_intent_id", payment_intent_id).execute()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update order: {e}")
+
+    elif event["type"] == "payment_intent.payment_failed":
+        payment_intent_id = event["data"]["object"]["id"]
+        try:
+            # Only touch orders still waiting on payment, so a late
+            # "failed" event can never overwrite an order that's paid.
+            supabase.table("orders").update({"payment_status": "failed"}) \
+                .eq("stripe_payment_intent_id", payment_intent_id) \
+                .eq("payment_status", "pending").execute()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to update order: {e}")
 
